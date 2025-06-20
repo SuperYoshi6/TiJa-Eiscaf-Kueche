@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Küche – Live-Bestellungen</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <style>
+    body { font-family: sans-serif; background: #f9f9f9; padding: 2rem; }
+    .order { padding: 1rem; border-bottom: 1px solid #ccc; background-color: #fff; }
+    .order.expired { opacity: 0.5; text-decoration: line-through; }
+  </style>
+</head>
+<body>
+
+  <h1>📋 Neue Bestellungen</h1>
+  <div id="orders"></div>
+
+  <script>
+    // Supabase initialisieren
+    const supabaseClient = supabase.createClient(
+      'https://bkrkztfybcmccwjjufym.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJrcmt6dGZ5YmNtY2N3amp1ZnltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk5MTk0OTAsImV4cCI6MjA2NTQ5NTQ5MH0.Wrtn346kdT51S7xyr2eN97idN7pkMGFhmAMLzW_-pvU'
+    );
+
+    const ordersDiv = document.getElementById("orders");
+
+    // Echtzeit-Bestellungen überwachen
+    supabaseClient
+      .channel('orders-inserts')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'orders' },
+        payload => showOrder(payload.new)
+      )
+      .subscribe();
+
+    // Funktion, um Bestellungen anzuzeigen
+    function showOrder(order) {
+      const el = document.createElement("div");
+      el.className = "order";
+      el.dataset.timestamp = new Date(order.created_at).getTime(); // Zeitstempel speichern
+      el.innerHTML = `
+        ✍️ Name: <strong>${order.name}</strong><br>
+        🍨 Eis: ${order.ice || "—"} (${order.scoops || "1 Kugel"})<br>
+        🥤 Getränke: ${order.drinks || "Kein Getränk"}<br>
+        Toppings: ${order.toppings || "Keine"}<br>
+        🕒 Bestellt um: ${new Date(order.created_at).toLocaleTimeString()}
+      `;
+      ordersDiv.prepend(el);
+
+      // Bestellung nach 10 Sekunden ausgrauen
+      setTimeout(() => {
+        el.classList.add('expired');
+      }, 10 * 1000); // 10 Sekunden
+
+      // Bestellung nach 30 Minuten entfernen
+      setTimeout(() => {
+        el.remove();
+      }, 30 * 60 * 1000); // 30 Minuten
+    }
+
+    // Alle 10 Sekunden Bestellungen neu laden
+    setInterval(async () => {
+      const { data: orders, error } = await supabaseClient
+        .from("orders")
+        .select()
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (error) {
+        console.error("Fehler beim Abrufen der Bestellungen", error);
+      } else {
+        ordersDiv.innerHTML = '';  // Alte Bestellungen löschen
+        orders.forEach(order => showOrder(order));  // Neue Bestellungen anzeigen
+      }
+    }, 10 * 1000);  // Alle 10 Sekunden
+  </script>
+
+</body>
+</html>
